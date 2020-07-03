@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 
 	"github.com/fatih/color"
 )
@@ -29,41 +30,44 @@ func main() {
 		return
 	}
 
-	resp, err := http.Get("https://api.github.com/users/" + *username + "/repos?per_page=200")
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return
-	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	repos := []Repo{}
-	err = dec.Decode(&repos)
-	if err != nil {
-		fmt.Printf("Error: %s\n%s\n", err, string(body))
-		return
-	}
-
-	for i, r := range repos {
-		if exists(r.Name) {
-			color.Yellow("%d/%d Skipping already cloned repo %s.\n", i, len(repos), r.SSHURL)
-			continue
-		}
-		if r.Archived {
-			color.Yellow("%d/%d Skipping archived repo %s.\n", i, len(repos), r.SSHURL)
-			continue
-		}
-		color.Green("%d/%d Cloning repo %s:\n", i, len(repos), r.SSHURL)
-		cmd := exec.Command("git", "clone", r.SSHURL)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
+	for page := 1; page <= 20; page++ { // 20 pages should be enough to pull down most repo's
+		color.Red("Getting Page: %d\n", page)
+		resp, err := http.Get("https://api.github.com/users/" + *username + "/repos?per_page=100&page=" + strconv.Itoa(page))
 		if err != nil {
 			fmt.Printf("Error: %s\n", err)
+			return
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return
+		}
+		dec := json.NewDecoder(bytes.NewReader(body))
+		repos := []Repo{}
+		err = dec.Decode(&repos)
+		if err != nil {
+			fmt.Printf("Error: %s\n%s\n", err, string(body))
+			return
+		}
+
+		for i, r := range repos {
+			if exists(r.Name) {
+				color.Yellow("%d/%d Skipping already cloned repo %s.\n", i, len(repos), r.SSHURL)
+				continue
+			}
+			if r.Archived {
+				color.Yellow("%d/%d Skipping archived repo %s.\n", i, len(repos), r.SSHURL)
+				continue
+			}
+			color.Green("%d/%d Cloning repo %s:\n", i, len(repos), r.SSHURL)
+			cmd := exec.Command("git", "clone", r.SSHURL)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Printf("Error: %s\n", err)
+			}
 		}
 	}
 }
